@@ -1,5 +1,6 @@
 package com.sqlrec.frontend.cli;
 
+import com.sqlrec.common.utils.SqlStatementUtils;
 import org.jline.reader.Highlighter;
 import org.jline.reader.LineReader;
 import org.jline.utils.AttributedString;
@@ -16,7 +17,7 @@ import java.util.regex.Pattern;
  * <ul>
  *     <li>line/block comments — faint</li>
  *     <li>single-quoted string literals — bold green</li>
- *     <li>double-quoted identifiers — bold cyan</li>
+ *     <li>double-quoted and backtick-quoted identifiers — bold cyan</li>
  *     <li>numbers — bold yellow</li>
  *     <li>SQL keywords — bold blue</li>
  *     <li>everything else — default</li>
@@ -49,38 +50,18 @@ public class SqlHighlighter implements Highlighter {
         int i = 0;
         int n = buffer.length();
         while (i < n) {
+            SqlStatementUtils.Region region = SqlStatementUtils.scanRegion(buffer, i);
+            if (region != null) {
+                AttributedStyle style = switch (region.getKind()) {
+                    case LINE_COMMENT, BLOCK_COMMENT -> AttributedStyle.DEFAULT.faint();
+                    case STRING -> AttributedStyle.BOLD.foreground(AttributedStyle.GREEN);
+                    case QUOTED_IDENTIFIER -> AttributedStyle.BOLD.foreground(AttributedStyle.CYAN);
+                };
+                appendStyled(sb, buffer, i, region.getEnd(), style);
+                i = region.getEnd();
+                continue;
+            }
             char c = buffer.charAt(i);
-            // line comment
-            if (c == '-' && i + 1 < n && buffer.charAt(i + 1) == '-') {
-                int start = i;
-                while (i < n && buffer.charAt(i) != '\n') {
-                    i++;
-                }
-                appendStyled(sb, buffer, start, i, AttributedStyle.DEFAULT.faint());
-                continue;
-            }
-            // block comment
-            if (c == '/' && i + 1 < n && buffer.charAt(i + 1) == '*') {
-                int start = i;
-                i += 2;
-                while (i < n && !(buffer.charAt(i) == '*' && i + 1 < n && buffer.charAt(i + 1) == '/')) {
-                    i++;
-                }
-                if (i < n) {
-                    i += 2;
-                }
-                appendStyled(sb, buffer, start, i, AttributedStyle.DEFAULT.faint());
-                continue;
-            }
-            // quoted string or identifier
-            if (c == '\'' || c == '"') {
-                int start = i;
-                i = quotedEnd(buffer, start, c);
-                AttributedStyle style = AttributedStyle.BOLD.foreground(
-                        c == '\'' ? AttributedStyle.GREEN : AttributedStyle.CYAN);
-                appendStyled(sb, buffer, start, i, style);
-                continue;
-            }
             // number
             if (Character.isDigit(c)) {
                 int start = i;
@@ -109,22 +90,6 @@ public class SqlHighlighter implements Highlighter {
             i++;
         }
         return sb.toAttributedString();
-    }
-
-    private static int quotedEnd(String buffer, int start, char quote) {
-        int end = start + 1;
-        while (end < buffer.length()) {
-            if (buffer.charAt(end) == quote) {
-                end++;
-                if (end < buffer.length() && buffer.charAt(end) == quote) {
-                    end++;
-                    continue;
-                }
-                break;
-            }
-            end++;
-        }
-        return end;
     }
 
     private static void appendStyled(

@@ -1,11 +1,14 @@
 package com.sqlrec.common.utils;
 
+import com.sqlrec.common.utils.SqlStatementUtils.RegionKind;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -14,6 +17,39 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * in the default {@code test} phase (no {@code @Tag("integration")}).
  */
 class SqlStatementUtilsTest {
+
+    @Test
+    void scanRegionReportsCommentKindAndExclusiveEnd() {
+        assertRegion("x -- comment\nnext", 2, RegionKind.LINE_COMMENT, "-- comment", true);
+        assertRegion("x -- comment", 2, RegionKind.LINE_COMMENT, "-- comment", true);
+        assertRegion("x /* comment */ next", 2, RegionKind.BLOCK_COMMENT, "/* comment */", true);
+        assertRegion("x /* unfinished", 2, RegionKind.BLOCK_COMMENT, "/* unfinished", false);
+    }
+
+    @Test
+    void scanRegionReportsQuoteKindAndClosureAfterEscapedDelimiters() {
+        assertRegion("x 'it''s';", 2, RegionKind.STRING, "'it''s'", true);
+        assertRegion("x 'it''", 2, RegionKind.STRING, "'it''", false);
+        assertRegion("x \"a\"\"b\";", 2, RegionKind.QUOTED_IDENTIFIER, "\"a\"\"b\"", true);
+        assertRegion("x `a``b`;", 2, RegionKind.QUOTED_IDENTIFIER, "`a``b`", true);
+        assertRegion("x `a``;", 2, RegionKind.QUOTED_IDENTIFIER, "`a``;", false);
+    }
+
+    @Test
+    void scanRegionIgnoresOrdinaryCharacters() {
+        String text = "-/;";
+        for (int i = 0; i < text.length(); i++) {
+            assertNull(SqlStatementUtils.scanRegion(text, i));
+        }
+    }
+
+    private static void assertRegion(String text, int start, RegionKind kind, String regionText, boolean closed) {
+        SqlStatementUtils.Region region = SqlStatementUtils.scanRegion(text, start);
+        assertNotNull(region, text);
+        assertEquals(kind, region.getKind(), text);
+        assertEquals(start + regionText.length(), region.getEnd(), text);
+        assertEquals(closed, region.isClosed(), text);
+    }
 
     @Test
     void commentsKeepAdjacentTokensSeparate() {

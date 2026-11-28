@@ -13,6 +13,7 @@ import org.apache.calcite.sql.SqlNumericLiteral;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Parameter;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,6 +23,25 @@ import java.util.stream.Collectors;
 /** Selects an evaluate overload from the static types of SQLRec CALL arguments. */
 public final class JavaFunctionMethodMatcher {
     private JavaFunctionMethodMatcher() {
+    }
+
+    public enum ParameterKind {
+        INPUT, VARARGS, READONLY_CONTEXT, EXECUTE_CONTEXT;
+
+        private boolean isContext() {
+            return this == READONLY_CONTEXT || this == EXECUTE_CONTEXT;
+        }
+    }
+
+    public static ParameterKind parameterKind(Parameter parameter) {
+        Class<?> type = parameter.getType();
+        if (type == ReadonlyContext.class) {
+            return ParameterKind.READONLY_CONTEXT;
+        }
+        if (type == ExecuteContext.class) {
+            return ParameterKind.EXECUTE_CONTEXT;
+        }
+        return parameter.isVarArgs() ? ParameterKind.VARARGS : ParameterKind.INPUT;
     }
 
     public static Method selectEvalMethod(String functionName, Class<?> functionClass, List<SqlNode> inputs) {
@@ -54,20 +74,20 @@ public final class JavaFunctionMethodMatcher {
     }
 
     private static int methodMatchScore(Method method, List<SqlNode> inputs) {
-        Class<?>[] paramTypes = method.getParameterTypes();
         int inputCount = inputs != null ? inputs.size() : 0;
         int inputIndex = 0;
         int score = 0;
-        for (int i = 0; i < paramTypes.length; i++) {
-            Class<?> paramType = paramTypes[i];
-            if (paramType == ExecuteContext.class || paramType == ReadonlyContext.class) {
+        for (Parameter parameter : method.getParameters()) {
+            ParameterKind kind = parameterKind(parameter);
+            if (kind.isContext()) {
                 continue;
             }
-            boolean varArg = method.isVarArgs() && i == paramTypes.length - 1;
+            boolean varArg = kind == ParameterKind.VARARGS;
+            Class<?> type = varArg ? parameter.getType().getComponentType() : parameter.getType();
             int count = varArg ? inputCount - inputIndex : 1;
             for (int j = 0; j < count; j++) {
                 if (inputIndex >= inputCount) return -1;
-                int match = inputMatchScore(inputs.get(inputIndex++), varArg ? paramType.getComponentType() : paramType);
+                int match = inputMatchScore(inputs.get(inputIndex++), type);
                 if (match < 0) return -1;
                 score += match;
             }
@@ -99,12 +119,13 @@ public final class JavaFunctionMethodMatcher {
 
     private static String signature(String functionName, Method method) {
         StringJoiner signature = new StringJoiner(", ", functionName + "(", ")");
-        Class<?>[] parameters = method.getParameterTypes();
-        for (int i = 0; i < parameters.length; i++) {
-            Class<?> type = parameters[i];
-            if (type == ExecuteContext.class || type == ReadonlyContext.class) continue;
-            boolean varArg = method.isVarArgs() && i == parameters.length - 1;
-            signature.add(varArg ? typeName(type.getComponentType()) + "..." : typeName(type));
+        for (Parameter parameter : method.getParameters()) {
+            ParameterKind kind = parameterKind(parameter);
+            if (!kind.isContext()) {
+                Class<?> type = parameter.getType();
+                signature.add(kind == ParameterKind.VARARGS
+                        ? typeName(type.getComponentType()) + "..." : typeName(type));
+            }
         }
         return signature.toString();
     }

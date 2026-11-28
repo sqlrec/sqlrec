@@ -104,7 +104,7 @@ class SqlHighlighterTest {
 
     @Test
     void keepsEscapedQuotesAndCommentMarkersInsideQuotedTokens() {
-        for (char quote : new char[]{'\'', '"'}) {
+        for (char quote : new char[]{'\'', '"', '`'}) {
             String token = quote + "a" + quote + quote + "--/*b" + quote;
             String buffer = token + " x";
             AttributedString result = highlighter.highlight(null, buffer);
@@ -119,7 +119,7 @@ class SqlHighlighterTest {
 
     @Test
     void stylesUnterminatedQuotesThroughEndOfInput() {
-        for (char quote : new char[]{'\'', '"'}) {
+        for (char quote : new char[]{'\'', '"', '`'}) {
             String buffer = quote + "unfinished" + quote + quote;
             AttributedString result = highlighter.highlight(null, buffer);
 

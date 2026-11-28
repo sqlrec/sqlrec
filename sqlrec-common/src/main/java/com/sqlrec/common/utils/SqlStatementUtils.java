@@ -3,17 +3,72 @@ package com.sqlrec.common.utils;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Pure (no JLine / Calcite dependency) helpers for SQL statement splitting
- * and completeness detection. Safe to unit-test in isolation.
- * <p>
- * The lexer only recognises quotes and comments; it does not build a parse
- * tree, so it is transparent to sqlrec-specific dialect extensions such as
- * {@code cache table ...} or {@code call main_rec(...)}.
- */
+/** Scans SQL quotes and comments for statement splitting and syntax highlighting. */
 public final class SqlStatementUtils {
 
     private SqlStatementUtils() {
+    }
+
+    public enum RegionKind {
+        LINE_COMMENT, BLOCK_COMMENT, STRING, QUOTED_IDENTIFIER
+    }
+
+    public static final class Region {
+        private final RegionKind kind;
+        private final int end;
+        private final boolean closed;
+
+        private Region(RegionKind kind, int end, boolean closed) {
+            this.kind = kind;
+            this.end = end;
+            this.closed = closed;
+        }
+
+        public RegionKind getKind() {
+            return kind;
+        }
+
+        /** Returns the exclusive end offset. */
+        public int getEnd() {
+            return end;
+        }
+
+        public boolean isClosed() {
+            return closed;
+        }
+    }
+
+    /** Scans a quote or comment beginning at {@code start}, or returns null at an ordinary character. */
+    public static Region scanRegion(String text, int start) {
+        char first = text.charAt(start);
+        if (first == '-' && text.startsWith("--", start)) {
+            int end = text.indexOf('\n', start + 2);
+            return new Region(RegionKind.LINE_COMMENT, end < 0 ? text.length() : end, true);
+        }
+        if (first == '/' && text.startsWith("/*", start)) {
+            int end = text.indexOf("*/", start + 2);
+            return new Region(RegionKind.BLOCK_COMMENT, end < 0 ? text.length() : end + 2, end >= 0);
+        }
+        if (first == '\'' || first == '"' || first == '`') {
+            return scanQuotedRegion(text, start, first);
+        }
+        return null;
+    }
+
+    private static Region scanQuotedRegion(String text, int start, char quote) {
+        RegionKind kind = quote == '\'' ? RegionKind.STRING : RegionKind.QUOTED_IDENTIFIER;
+        int end = start + 1;
+        while (end < text.length()) {
+            char current = text.charAt(end);
+            end++;
+            if (current == quote) {
+                if (end == text.length() || text.charAt(end) != quote) {
+                    return new Region(kind, end, true);
+                }
+                end++;
+            }
+        }
+        return new Region(kind, end, false);
     }
 
     /**
@@ -25,58 +80,25 @@ public final class SqlStatementUtils {
     static String splitTo(String text, List<String> out) {
         StringBuilder cur = new StringBuilder();
         int i = 0;
-        int n = text.length();
-        while (i < n) {
+        while (i < text.length()) {
+            Region region = scanRegion(text, i);
+            if (region != null) {
+                switch (region.getKind()) {
+                    case LINE_COMMENT:
+                        break;
+                    case BLOCK_COMMENT:
+                        // Separate adjacent tokens or leave a marker for an unclosed comment.
+                        cur.append(region.isClosed() ? " " : "/*");
+                        break;
+                    case STRING:
+                    case QUOTED_IDENTIFIER:
+                        cur.append(text, i, region.getEnd());
+                        break;
+                }
+                i = region.getEnd();
+                continue;
+            }
             char c = text.charAt(i);
-            // line comment -- skip entirely (including the trailing newline is left for the next iteration)
-            if (c == '-' && i + 1 < n && text.charAt(i + 1) == '-') {
-                i += 2;
-                while (i < n && text.charAt(i) != '\n') {
-                    i++;
-                }
-                continue;
-            }
-            // block comment /* */ - skip if closed; append "/*" if unclosed so that
-            // isCompleteStatement sees a non-empty remainder and returns false
-            if (c == '/' && i + 1 < n && text.charAt(i + 1) == '*') {
-                i += 2;
-                boolean closed = false;
-                while (i < n) {
-                    if (text.charAt(i) == '*' && i + 1 < n && text.charAt(i + 1) == '/') {
-                        i += 2;
-                        closed = true;
-                        break;
-                    }
-                    i++;
-                }
-                if (!closed) {
-                    cur.append("/*");
-                } else {
-                    // A comment separates tokens even when no whitespace surrounds it.
-                    cur.append(' ');
-                }
-                continue;
-            }
-            // Strings and quoted identifiers share doubled-delimiter escaping.
-            if (c == '\'' || c == '"' || c == '`') {
-                char delimiter = c;
-                cur.append(c);
-                i++;
-                while (i < n) {
-                    char cc = text.charAt(i);
-                    cur.append(cc);
-                    i++;
-                    if (cc == delimiter) {
-                        if (i < n && text.charAt(i) == delimiter) {
-                            cur.append(delimiter);
-                            i++;
-                            continue;
-                        }
-                        break;
-                    }
-                }
-                continue;
-            }
             if (c == ';') {
                 String s = cur.toString().trim();
                 if (!s.isEmpty()) {

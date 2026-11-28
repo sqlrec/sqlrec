@@ -19,6 +19,8 @@ import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.BasicSqlType;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.junit.jupiter.api.AfterEach;
@@ -231,6 +233,20 @@ public class JavaFunctionBindableTest {
         assertSame(input, function.table);
         assertSame(context, function.executeContext);
         assertArrayEquals(new String[]{null, "", "fallback"}, function.rest);
+    }
+
+    @Test
+    void onlyAWritableContextPreventsParallelExecution() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        var withoutContext = new JavaFunctionBindable("no_context", new TestEmptyFun(), List.of(), null, schema);
+        var readonly = new JavaFunctionBindable(
+                "readonly", new TestReadonlyContextFun(), List.of(), null, schema);
+        var writable = new JavaFunctionBindable("writable", new TestContextFun(),
+                List.of(SqlLiteral.createCharString("key", SqlParserPos.ZERO)), null, schema);
+
+        assertTrue(withoutContext.isParallelizable());
+        assertTrue(readonly.isParallelizable());
+        assertFalse(writable.isParallelizable());
     }
 
     @Test
@@ -509,6 +525,11 @@ public class JavaFunctionBindableTest {
             if (argValue != null) {
                 System.out.println(argValue);
             }
+        }
+    }
+
+    public static class TestReadonlyContextFun {
+        public void evaluate(ReadonlyContext context) {
         }
     }
 

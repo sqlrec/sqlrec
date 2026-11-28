@@ -105,8 +105,7 @@ public class RedisCalciteTable extends SqlRecKvTable {
                         : redisHandler.replaceSingleValueRows(oldRows, newRows);
             } catch (RuntimeException failure) {
                 // Redis commands may already have changed some rows when a batch fails.
-                oldRows.forEach(table::invalidateCache);
-                newRows.forEach(table::invalidateCache);
+                invalidateUpdateCache(oldRows, newRows);
                 throw failure;
             }
         }

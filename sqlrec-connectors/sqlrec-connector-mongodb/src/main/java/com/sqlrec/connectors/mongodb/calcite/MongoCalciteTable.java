@@ -100,8 +100,7 @@ public class MongoCalciteTable extends SqlRecKvTable {
                 return mongoHandler.updateBatch(oldRows, newRows);
             } catch (MongoException failure) {
                 // An ordered bulk write can fail after moving some of the keys.
-                oldRows.forEach(table::invalidateCache);
-                newRows.forEach(table::invalidateCache);
+                invalidateUpdateCache(oldRows, newRows);
                 throw failure;
             }
         }

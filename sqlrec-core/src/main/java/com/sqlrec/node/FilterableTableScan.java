@@ -1,23 +1,19 @@
 package com.sqlrec.node;
 
 import com.google.common.collect.ImmutableList;
+import com.sqlrec.utils.NodeUtils;
 import org.apache.calcite.adapter.enumerable.*;
-import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.tree.Blocks;
 import org.apache.calcite.linq4j.tree.Expression;
 import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.plan.*;
-import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelWriter;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.schema.FilterableTable;
-import org.apache.calcite.schema.Schemas;
 import org.apache.calcite.schema.Table;
-import org.apache.calcite.sql.validate.SqlValidatorUtil;
-import org.apache.calcite.util.BuiltInMethod;
 import org.apache.calcite.util.ImmutableIntList;
 
 import java.util.List;
@@ -82,25 +78,7 @@ public class FilterableTableScan extends EnumerableTableScan {
             return super.implement(implementor, pref);
         }
 
-        RelOptSchema relOptSchema = table.getRelOptSchema();
-        if (!(relOptSchema instanceof CalciteCatalogReader)) {
-            throw new IllegalArgumentException("FilterableTableScan only support CalciteCatalogReader");
-        }
-
-        CalciteCatalogReader catalogReader = (CalciteCatalogReader) relOptSchema;
-        List<String> qualifiedName = table.getQualifiedName();
-        CalciteSchema.TableEntry tableEntry = SqlValidatorUtil.getTableEntry(catalogReader, qualifiedName);
-        if (tableEntry == null) {
-            throw new IllegalArgumentException("Table not found: " + qualifiedName);
-        }
-
-        Expression expression = Expressions.call(
-                Schemas.expression(tableEntry.schema.plus()),
-                BuiltInMethod.SCHEMA_GET_TABLE.method,
-                Expressions.constant(tableEntry.name));
-        expression = Expressions.convert_(expression, FilterableTable.class);
-
-
+        Expression expression = NodeUtils.tableExpression(table, FilterableTable.class);
         final Expression stashedFilters = implementor.stash(filters, List.class);
         final Expression scanCall =
                 Expressions.call(expression, "scan",

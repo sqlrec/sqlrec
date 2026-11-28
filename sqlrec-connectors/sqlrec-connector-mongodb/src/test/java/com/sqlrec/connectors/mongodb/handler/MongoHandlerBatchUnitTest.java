@@ -24,6 +24,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,8 +33,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -104,14 +108,25 @@ class MongoHandlerBatchUnitTest {
     }
 
     @Test
-    void updateWithNoMatchesReturnsZero() {
+    void updateWithNoMatchesReturnsZeroAndInvalidatesOnlyAffectedKeys() {
         when(mockCollection.bulkWrite(anyList()))
                 .thenReturn(BulkWriteResult.acknowledged(0, 0, 0, 0, List.of(), List.of()));
-        var rows = new MongoCalciteTable.MongoCollection(new MongoCalciteTable(config), handler);
+
+        config.maxCacheSize = 10;
+        config.cacheTtl = 60;
+        var table = spy(new MongoCalciteTable(config));
+        var rows = new MongoCalciteTable.MongoCollection(table, handler);
+        Set<Object> keys = Set.of("missing", "new-key", "unrelated");
+        doReturn(Map.of("missing", List.of(), "new-key", List.of(), "unrelated", List.of()))
+                .when(table).getByPrimaryKeyImpl(keys);
+        table.getByPrimaryKey(keys);
+        assertEquals(keys, table.getCachedByPrimaryKey(keys).keySet());
 
         assertFalse(rows.replaceAll(Collections.singletonList(new Object[]{"missing", "value"}),
                 Collections.singletonList(new Object[]{"new-key", "value"})));
+
         assertEquals(0, rows.size());
+        assertEquals(Set.of("unrelated"), table.getCachedByPrimaryKey(keys).keySet());
     }
 
     @Test

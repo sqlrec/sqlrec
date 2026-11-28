@@ -1,12 +1,20 @@
 package com.sqlrec.utils;
 
 import com.sqlrec.compiler.CompileManager;
+import com.sqlrec.compiler.NormalSqlCompiler;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.plan.RelOptSchema;
+import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.schema.FilterableTable;
+import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class NodeUtilsTest {
 
@@ -101,5 +109,31 @@ public class NodeUtilsTest {
     public void testIsScanKVTableWithNull() {
         boolean result = NodeUtils.isScanKVTable(null);
         assertFalse(result);
+    }
+
+    @Test
+    void tableExpressionRejectsNonCalciteCatalogReader() {
+        RelOptTable table = mock(RelOptTable.class);
+        when(table.getQualifiedName()).thenReturn(List.of("warehouse", "items"));
+        when(table.getRelOptSchema()).thenReturn(mock(RelOptSchema.class));
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> NodeUtils.tableExpression(table, FilterableTable.class));
+
+        assertEquals("Table [warehouse, items] requires a CalciteCatalogReader", error.getMessage());
+    }
+
+    @Test
+    void tableExpressionReportsMissingQualifiedTable() {
+        CalciteSchema schema = CalciteSchema.createRootSchema(false);
+        schema.add("warehouse", new AbstractSchema());
+        RelOptTable table = mock(RelOptTable.class);
+        when(table.getQualifiedName()).thenReturn(List.of("warehouse", "missing"));
+        when(table.getRelOptSchema()).thenReturn(NormalSqlCompiler.getCatalogReader(schema, "warehouse"));
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> NodeUtils.tableExpression(table, FilterableTable.class));
+
+        assertEquals("Table not found: [warehouse, missing]", error.getMessage());
     }
 }

@@ -2,8 +2,12 @@ package com.sqlrec.utils;
 
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.SqlRecKvTable;
+import org.apache.calcite.jdbc.CalciteSchema;
+import org.apache.calcite.linq4j.tree.Expression;
+import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.volcano.RelSubset;
+import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelVisitor;
 import org.apache.calcite.rel.core.TableModify;
@@ -13,8 +17,11 @@ import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.schema.Schemas;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.util.SqlBasicVisitor;
+import org.apache.calcite.sql.validate.SqlValidatorUtil;
+import org.apache.calcite.util.BuiltInMethod;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -58,6 +65,23 @@ public class NodeUtils {
         }
 
         return null;
+    }
+
+    /** Generates a table lookup in the resolved schema for an enumerable plan. */
+    public static Expression tableExpression(RelOptTable table, Class<?> tableType) {
+        List<String> qualifiedName = table.getQualifiedName();
+        if (!(table.getRelOptSchema() instanceof CalciteCatalogReader catalogReader)) {
+            throw new IllegalArgumentException("Table " + qualifiedName + " requires a CalciteCatalogReader");
+        }
+        CalciteSchema.TableEntry tableEntry = SqlValidatorUtil.getTableEntry(catalogReader, qualifiedName);
+        if (tableEntry == null) {
+            throw new IllegalArgumentException("Table not found: " + qualifiedName);
+        }
+        Expression lookup = Expressions.call(
+                Schemas.expression(tableEntry.schema.plus()),
+                BuiltInMethod.SCHEMA_GET_TABLE.method,
+                Expressions.constant(tableEntry.name));
+        return Expressions.convert_(lookup, tableType);
     }
 
     public static Map.Entry<Integer, Integer> getJoinKeyColIndex(RexNode condition) {

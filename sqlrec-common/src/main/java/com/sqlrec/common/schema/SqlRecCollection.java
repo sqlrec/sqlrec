@@ -51,12 +51,7 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
         try {
             int updated = replaceAllImpl(oldRows, newRows);
             size += updated;
-            for (Object[] row : oldRows) {
-                invalidateCacheIfNeeded(row);
-            }
-            for (Object[] row : newRows) {
-                invalidateCacheIfNeeded(row);
-            }
+            invalidateUpdateCache(oldRows, newRows);
             return updated > 0;
         } catch (Throwable e) {
             log.error("replaceAll in table {} error", tableName, e);
@@ -65,6 +60,12 @@ public abstract class SqlRecCollection implements Collection<Object[]> {
         } finally {
             recordDuration("update", "true", status, startTime);
         }
+    }
+
+    /** Invalidates the cache entries for the old and new rows of an UPDATE. */
+    protected final void invalidateUpdateCache(List<Object[]> oldRows, List<Object[]> newRows) {
+        oldRows.forEach(this::invalidateCacheIfNeeded);
+        newRows.forEach(this::invalidateCacheIfNeeded);
     }
 
     protected boolean addAllImpl(Collection<? extends Object[]> c) {

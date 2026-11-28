@@ -3,12 +3,12 @@ package com.sqlrec.runtime;
 import com.google.common.primitives.Primitives;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.runtime.ExecuteContext;
-import com.sqlrec.common.runtime.ReadonlyContext;
 import com.sqlrec.common.runtime.UnionLikeTableFunction;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.sql.parser.SqlGetVariable;
 import com.sqlrec.utils.JavaFunctionMethodMatcher;
+import com.sqlrec.utils.JavaFunctionMethodMatcher.ParameterKind;
 import com.sqlrec.utils.SchemaUtils;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.linq4j.Enumerable;
@@ -19,6 +19,7 @@ import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -28,8 +29,7 @@ public class JavaFunctionBindable extends BindableInterface {
     private final List<SqlNode> inputTableList;
     private final List<RelDataTypeField> returnDataFields;
     private final Method evalMethod;
-    private final Class<?>[] parameterTypes;
-    private final boolean varArgs;
+    private final Parameter[] parameters;
 
     public JavaFunctionBindable(
             String functionName,
@@ -41,8 +41,7 @@ public class JavaFunctionBindable extends BindableInterface {
         this.tableFunction = tableFunction;
         this.inputTableList = inputTableList;
         this.evalMethod = JavaFunctionMethodMatcher.selectEvalMethod(functionName, tableFunction.getClass(), inputTableList);
-        this.parameterTypes = evalMethod.getParameterTypes();
-        this.varArgs = evalMethod.isVarArgs();
+        this.parameters = evalMethod.getParameters();
 
         List<RelDataTypeField> resolvedReturnDataFields = returnDataFields;
         if (resolvedReturnDataFields == null && CacheTable.class.isAssignableFrom(evalMethod.getReturnType())) {
@@ -104,26 +103,28 @@ public class JavaFunctionBindable extends BindableInterface {
     }
 
     private Object callEvalMethod(CalciteSchema schema, ExecuteContext context) {
-        Object[] arguments = new Object[parameterTypes.length];
+        Object[] arguments = new Object[parameters.length];
         int inputParamIndex = 0;
 
-        for (int i = 0; i < parameterTypes.length; i++) {
-            Class<?> paramType = parameterTypes[i];
-
-            if (varArgs && i == parameterTypes.length - 1) {
-                arguments[i] = resolveVarArgs(paramType.getComponentType(), inputParamIndex, schema, context);
-            } else if (paramType.equals(ExecuteContext.class) || paramType.equals(ReadonlyContext.class)) {
-                arguments[i] = context;
-            } else {
-                if (inputParamIndex >= inputTableList.size()) {
-                    throw new RuntimeException("not enough input parameters");
+        for (int i = 0; i < parameters.length; i++) {
+            Parameter parameter = parameters[i];
+            switch (JavaFunctionMethodMatcher.parameterKind(parameter)) {
+                case VARARGS -> {
+                    arguments[i] = resolveVarArgs(parameter.getType().getComponentType(), inputParamIndex, schema, context);
+                    inputParamIndex = inputTableList.size();
                 }
-                arguments[i] = resolveInput(paramType, inputParamIndex, schema, context);
-                inputParamIndex++;
+                case READONLY_CONTEXT, EXECUTE_CONTEXT -> arguments[i] = context;
+                case INPUT -> {
+                    if (inputParamIndex >= inputTableList.size()) {
+                        throw new RuntimeException("not enough input parameters");
+                    }
+                    arguments[i] = resolveInput(parameter.getType(), inputParamIndex, schema, context);
+                    inputParamIndex++;
+                }
             }
         }
 
-        if (!varArgs && inputParamIndex != inputTableList.size()) {
+        if (inputParamIndex != inputTableList.size()) {
             throw new RuntimeException("input parameter count not match");
         }
 
@@ -155,8 +156,8 @@ public class JavaFunctionBindable extends BindableInterface {
 
     @Override
     public boolean isParallelizable() {
-        for (Class<?> paramType : parameterTypes) {
-            if (paramType.equals(ExecuteContext.class)) {
+        for (Parameter parameter : parameters) {
+            if (JavaFunctionMethodMatcher.parameterKind(parameter) == ParameterKind.EXECUTE_CONTEXT) {
                 return false;
             }
         }
