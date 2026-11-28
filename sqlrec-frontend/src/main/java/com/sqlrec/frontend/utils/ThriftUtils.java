@@ -4,6 +4,7 @@ import com.sqlrec.common.utils.JsonUtils;
 import org.apache.calcite.linq4j.Enumerable;
 import org.apache.calcite.linq4j.Enumerator;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.DateString;
 import org.apache.calcite.util.TimestampString;
 import org.apache.hive.service.rpc.thrift.*;
@@ -21,6 +22,7 @@ import java.time.temporal.ChronoField;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 
 public class ThriftUtils {
     private static final Logger logger = LoggerFactory.getLogger(ThriftUtils.class);
@@ -28,6 +30,36 @@ public class ThriftUtils {
             .appendPattern("uuuu-MM-dd HH:mm:ss")
             .appendFraction(ChronoField.NANO_OF_SECOND, 0, 9, true)
             .toFormatter(Locale.ROOT);
+
+    private static final IntFunction<ResultColumn<?>> STRING_COLUMN =
+            stringColumn(value -> tryCast(value, String.class));
+    private static final IntFunction<ResultColumn<?>> DOUBLE_COLUMN = valueColumn(Double.class, 0.0,
+            (values, nulls) -> TColumn.doubleVal(new TDoubleColumn(values, nulls)));
+    private static final ColumnType FLOAT_COLUMN_TYPE = new ColumnType(TTypeId.FLOAT_TYPE, DOUBLE_COLUMN);
+    private static final ColumnType JSON_COLUMN_TYPE =
+            new ColumnType(TTypeId.STRING_TYPE, stringColumn(JsonUtils::toJson));
+    private static final Map<SqlTypeName, ColumnType> COLUMN_TYPES = Map.ofEntries(
+            Map.entry(SqlTypeName.VARCHAR, new ColumnType(TTypeId.STRING_TYPE, STRING_COLUMN)),
+            Map.entry(SqlTypeName.CHAR, new ColumnType(TTypeId.CHAR_TYPE, STRING_COLUMN)),
+            Map.entry(SqlTypeName.DATE, new ColumnType(TTypeId.DATE_TYPE, stringColumn(ThriftUtils::formatDate))),
+            Map.entry(SqlTypeName.TIMESTAMP,
+                    new ColumnType(TTypeId.TIMESTAMP_TYPE, stringColumn(ThriftUtils::formatTimestamp))),
+            Map.entry(SqlTypeName.TINYINT, new ColumnType(TTypeId.TINYINT_TYPE, valueColumn(Byte.class, (byte) 0,
+                    (values, nulls) -> TColumn.byteVal(new TByteColumn(values, nulls))))),
+            Map.entry(SqlTypeName.SMALLINT, new ColumnType(TTypeId.SMALLINT_TYPE, valueColumn(Short.class, (short) 0,
+                    (values, nulls) -> TColumn.i16Val(new TI16Column(values, nulls))))),
+            Map.entry(SqlTypeName.INTEGER, new ColumnType(TTypeId.INT_TYPE, valueColumn(Integer.class, 0,
+                    (values, nulls) -> TColumn.i32Val(new TI32Column(values, nulls))))),
+            Map.entry(SqlTypeName.BIGINT, new ColumnType(TTypeId.BIGINT_TYPE, valueColumn(Long.class, 0L,
+                    (values, nulls) -> TColumn.i64Val(new TI64Column(values, nulls))))),
+            Map.entry(SqlTypeName.REAL, FLOAT_COLUMN_TYPE),
+            Map.entry(SqlTypeName.FLOAT, FLOAT_COLUMN_TYPE),
+            Map.entry(SqlTypeName.DOUBLE, new ColumnType(TTypeId.DOUBLE_TYPE, DOUBLE_COLUMN)),
+            Map.entry(SqlTypeName.BOOLEAN, new ColumnType(TTypeId.BOOLEAN_TYPE, valueColumn(Boolean.class, false,
+                    (values, nulls) -> TColumn.boolVal(new TBoolColumn(values, nulls))))));
+
+    private record ColumnType(TTypeId typeId, IntFunction<ResultColumn<?>> columnFactory) {
+    }
 
     public static TStatus errorStatus(Exception error) {
         TStatus status = new TStatus(TStatusCode.ERROR_STATUS);
@@ -46,7 +78,7 @@ public class ThriftUtils {
     public static TRowSet convertObjectArrayToTRowSet(Enumerable<Object[]> enumerable, List<RelDataTypeField> fields) {
         List<ResultColumn<?>> resultColumns = new ArrayList<>(fields.size());
         for (RelDataTypeField field : fields) {
-            resultColumns.add(createColumn(field));
+            resultColumns.add(columnType(field).columnFactory().apply(field.getIndex()));
         }
         if (enumerable != null && !resultColumns.isEmpty()) {
             try (Enumerator<Object[]> rows = enumerable.enumerator()) {
@@ -70,30 +102,12 @@ public class ThriftUtils {
         return tRowSet;
     }
 
-    private static ResultColumn<?> createColumn(RelDataTypeField field) {
-        int index = field.getIndex();
-        return switch (field.getType().getSqlTypeName()) {
-            case VARCHAR, CHAR -> stringColumn(index, value -> tryCast(value, String.class));
-            case DATE -> stringColumn(index, ThriftUtils::formatDate);
-            case TIMESTAMP -> stringColumn(index, ThriftUtils::formatTimestamp);
-            case TINYINT -> valueColumn(index, Byte.class, (byte) 0,
-                    (values, nulls) -> TColumn.byteVal(new TByteColumn(values, nulls)));
-            case SMALLINT -> valueColumn(index, Short.class, (short) 0,
-                    (values, nulls) -> TColumn.i16Val(new TI16Column(values, nulls)));
-            case INTEGER -> valueColumn(index, Integer.class, 0,
-                    (values, nulls) -> TColumn.i32Val(new TI32Column(values, nulls)));
-            case BIGINT -> valueColumn(index, Long.class, 0L,
-                    (values, nulls) -> TColumn.i64Val(new TI64Column(values, nulls)));
-            case REAL, FLOAT, DOUBLE -> valueColumn(index, Double.class, 0.0,
-                    (values, nulls) -> TColumn.doubleVal(new TDoubleColumn(values, nulls)));
-            case BOOLEAN -> valueColumn(index, Boolean.class, false,
-                    (values, nulls) -> TColumn.boolVal(new TBoolColumn(values, nulls)));
-            default -> stringColumn(index, JsonUtils::toJson);
-        };
+    private static ColumnType columnType(RelDataTypeField field) {
+        return COLUMN_TYPES.getOrDefault(field.getType().getSqlTypeName(), JSON_COLUMN_TYPE);
     }
 
-    private static ResultColumn<String> stringColumn(int index, Function<Object, String> converter) {
-        return new ResultColumn<>(index, converter, "",
+    private static IntFunction<ResultColumn<?>> stringColumn(Function<Object, String> converter) {
+        return index -> new ResultColumn<>(index, converter, "",
                 (values, nulls) -> TColumn.stringVal(new TStringColumn(values, nulls)));
     }
 
@@ -118,9 +132,9 @@ public class ThriftUtils {
         return TIMESTAMP_TEXT.format(timestamp);
     }
 
-    private static <T> ResultColumn<T> valueColumn(int index, Class<T> type, T nullPlaceholder,
+    private static <T> IntFunction<ResultColumn<?>> valueColumn(Class<T> type, T nullPlaceholder,
             BiFunction<List<T>, ByteBuffer, TColumn> constructor) {
-        return new ResultColumn<>(index, value -> tryCast(value, type), nullPlaceholder, constructor);
+        return index -> new ResultColumn<>(index, value -> tryCast(value, type), nullPlaceholder, constructor);
     }
 
     private static final class ResultColumn<T> {
@@ -182,7 +196,7 @@ public class ThriftUtils {
         TTableSchema schema = new TTableSchema();
 
         for (RelDataTypeField field : fields) {
-            TPrimitiveTypeEntry typeEntry = new TPrimitiveTypeEntry(toTTypeId(field));
+            TPrimitiveTypeEntry typeEntry = new TPrimitiveTypeEntry(columnType(field).typeId());
             typeEntry.setTypeQualifiers(new TTypeQualifiers(new HashMap<>()));
             TTypeDesc tTypeDesc = new TTypeDesc(
                     Collections.singletonList(TTypeEntry.primitiveEntry(typeEntry))
@@ -191,23 +205,6 @@ public class ThriftUtils {
             schema.addToColumns(columnDesc);
         }
         return schema;
-    }
-
-    private static TTypeId toTTypeId(RelDataTypeField field) {
-        return switch (field.getType().getSqlTypeName()) {
-            case VARCHAR -> TTypeId.STRING_TYPE;
-            case CHAR -> TTypeId.CHAR_TYPE;
-            case SMALLINT -> TTypeId.SMALLINT_TYPE;
-            case TINYINT -> TTypeId.TINYINT_TYPE;
-            case INTEGER -> TTypeId.INT_TYPE;
-            case BIGINT -> TTypeId.BIGINT_TYPE;
-            case REAL, FLOAT -> TTypeId.FLOAT_TYPE;
-            case DOUBLE -> TTypeId.DOUBLE_TYPE;
-            case BOOLEAN -> TTypeId.BOOLEAN_TYPE;
-            case DATE -> TTypeId.DATE_TYPE;
-            case TIMESTAMP -> TTypeId.TIMESTAMP_TYPE;
-            default -> TTypeId.STRING_TYPE;
-        };
     }
 
     public static THandleIdentifier getHandleIdentifier() {

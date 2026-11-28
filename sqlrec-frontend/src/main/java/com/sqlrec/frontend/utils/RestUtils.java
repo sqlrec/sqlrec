@@ -11,6 +11,7 @@ import com.sqlrec.common.rest.RequestData;
 import com.sqlrec.common.utils.JsonUtils;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.*;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -40,13 +41,22 @@ public class RestUtils {
         return build(status, content.getBytes(StandardCharsets.UTF_8), "application/json", null);
     }
 
-    public static RequestData parseRequestData(String requestBody) {
+    public static RequestData parseRequestData(
+            String requestBody, String missingBodyMessage, String nonObjectBodyMessage) {
+        if (StringUtils.isBlank(requestBody)) {
+            throw new IllegalArgumentException(missingBodyMessage);
+        }
+        RequestData request;
         try {
-            return JsonUtils.fromJson(requestBody, RequestData.class);
+            request = JsonUtils.fromJson(requestBody, RequestData.class);
         } catch (JsonParseException e) {
             throw new IllegalArgumentException("invalid JSON request body: "
                     + errorMessage(e, "could not parse JSON"), e);
         }
+        if (request == null) {
+            throw new IllegalArgumentException(nonObjectBodyMessage);
+        }
+        return request;
     }
 
     public static String errorMessage(Exception exception, String fallback) {

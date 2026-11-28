@@ -9,7 +9,6 @@ import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.sql.parser.ddl.SqlTableColumn;
 import org.apache.flink.sql.parser.ddl.SqlTableOption;
 import org.slf4j.Logger;
@@ -190,14 +189,4 @@ public class SchemaUtils {
         }
         return table;
     }
-
-    public static String getSqlFirstWord(String sql) {
-        if (StringUtils.isEmpty(sql)) {
-            return "";
-        }
-        String[] parts = sql.trim().split("\\s+", 2);
-        String firstWord = parts[0].replaceAll("[^a-zA-Z0-9_]", "");
-        return firstWord.toLowerCase();
-    }
-
 }

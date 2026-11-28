@@ -4,6 +4,7 @@ import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
 import com.sqlrec.common.utils.ResourceNames;
+import com.sqlrec.common.utils.SqlStatementUtils;
 import com.sqlrec.runtime.BindableInterface;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.CalciteSchemaFactory;
@@ -28,6 +29,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 public class FunctionCompiler {
@@ -229,7 +231,7 @@ public class FunctionCompiler {
             }
         } else {
             bindable.setName(sqlFunctionBindable.getFunName() + ":" +
-                    SchemaUtils.getSqlFirstWord(sql) + ":" + bindableIndex);
+                    SqlStatementUtils.firstWord(sql).toLowerCase(Locale.ROOT) + ":" + bindableIndex);
         }
     }
 

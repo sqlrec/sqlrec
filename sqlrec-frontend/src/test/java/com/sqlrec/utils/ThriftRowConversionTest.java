@@ -40,12 +40,16 @@ class ThriftRowConversionTest {
 
         var result = ThriftUtils.convertObjectArrayToTRowSet(source, fields);
         var columns = result.getColumns();
+        var types = ThriftUtils.convertFieldsToTTableSchema(fields).getColumns().stream()
+                .map(column -> column.getTypeDesc().getTypes().getFirst().getPrimitiveEntry().getType())
+                .toList();
 
         assertEquals(1, enumerations.get());
+        assertEquals(List.of(TTypeId.STRING_TYPE, TTypeId.CHAR_TYPE, TTypeId.TINYINT_TYPE,
+                TTypeId.SMALLINT_TYPE, TTypeId.INT_TYPE, TTypeId.BIGINT_TYPE,
+                TTypeId.FLOAT_TYPE, TTypeId.DOUBLE_TYPE, TTypeId.BOOLEAN_TYPE, TTypeId.STRING_TYPE), types);
         assertEquals(List.of("text", ""), columns.get(0).getStringVal().getValues());
         assertEquals(List.of("c", ""), columns.get(1).getStringVal().getValues());
-        assertEquals(TTypeId.TINYINT_TYPE, ThriftUtils.convertFieldsToTTableSchema(fields)
-                .getColumns().get(2).getTypeDesc().getTypes().getFirst().getPrimitiveEntry().getType());
         assertEquals(List.of((byte) -128, (byte) 0), columns.get(2).getByteVal().getValues());
         assertEquals(List.of((short) 3, (short) 0), columns.get(3).getI16Val().getValues());
         assertEquals(List.of(4, 0), columns.get(4).getI32Val().getValues());

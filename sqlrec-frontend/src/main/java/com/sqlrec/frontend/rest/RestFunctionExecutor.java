@@ -31,30 +31,20 @@ import java.util.concurrent.TimeUnit;
 public class RestFunctionExecutor {
     private static final Logger logger = LoggerFactory.getLogger(RestFunctionExecutor.class);
 
-    public static ExecuteData execute(String apiName, String requestData) throws Exception {
+    public static ExecuteData execute(String apiName, String requestBody) throws Exception {
         if (StringUtils.isBlank(apiName)) {
             throw new IllegalArgumentException("API name is required");
         }
         apiName = ResourceNames.normalize(apiName);
 
-        RequestData request = parseRequest(requestData);
+        RequestData request = RestUtils.parseRequestData(requestBody,
+                "request body is required; expected a JSON object", "request body must be a JSON object");
         SqlFunctionBindable function = findFunction(apiName);
         CalciteSchema schema = CalciteSchemaFactory.createCalciteSchema();
         addTableToSchema(schema, function, request.getData());
 
         ExecuteContext context = createExecuteContext(request, schema);
         return executeFunction(apiName, function, schema, context);
-    }
-
-    private static RequestData parseRequest(String requestBody) {
-        if (StringUtils.isBlank(requestBody)) {
-            throw new IllegalArgumentException("request body is required; expected a JSON object");
-        }
-        RequestData request = RestUtils.parseRequestData(requestBody);
-        if (request == null) {
-            throw new IllegalArgumentException("request body must be a JSON object");
-        }
-        return request;
     }
 
     private static SqlFunctionBindable findFunction(String apiName) throws Exception {

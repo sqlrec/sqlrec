@@ -8,6 +8,7 @@ import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.RowTransformUtils;
+import com.sqlrec.common.utils.SqlStatementUtils;
 import com.sqlrec.executor.SqlExecutor;
 import com.sqlrec.frontend.utils.RestUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -18,23 +19,17 @@ import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 public class RestSqlExecutor {
-    public static ExecuteDataList execute(String requestData) throws Exception {
-        if (StringUtils.isBlank(requestData)) {
-            throw new IllegalArgumentException("request body is required; expected JSON with a non-empty sqls array");
-        }
-
-        RequestData params = RestUtils.parseRequestData(requestData);
-        if (params == null) {
-            throw new IllegalArgumentException("request body must be a JSON object with a non-empty sqls array");
-        }
-
-        List<String> sqls = params.getSqls();
+    public static ExecuteDataList execute(String requestBody) throws Exception {
+        RequestData request = RestUtils.parseRequestData(requestBody,
+                "request body is required; expected JSON with a non-empty sqls array",
+                "request body must be a JSON object with a non-empty sqls array");
+        List<String> sqls = request.getSqls();
         if (sqls == null || sqls.isEmpty()) {
             throw new IllegalArgumentException("sqls must be a non-empty array");
         }
 
         SqlExecutor sqlExecutor = new SqlExecutor();
-        sqlExecutor.setExecuteParams(params.getParams());
+        sqlExecutor.setExecuteParams(request.getParams());
 
         List<ExecuteData> results = new ArrayList<>(sqls.size());
         for (int index = 0; index < sqls.size(); index++) {
@@ -72,16 +67,13 @@ public class RestSqlExecutor {
             outcome = "error";
             throw e;
         } finally {
+            String statementType = SqlStatementUtils.firstWord(sql).toUpperCase(Locale.ROOT);
             MetricsUtils.getCompositeMeterRegistry()
                     .timer(Consts.METRICS_SQL_EXECUTION_DURATION,
                             MetricsUtils.createTags(sqlExecutor.getExecuteContext().getVariables(),
-                                    "statement_type", statementType(sql), "outcome", outcome))
+                                    "statement_type", statementType, "outcome", outcome))
                     .record(System.nanoTime() - start, TimeUnit.NANOSECONDS);
         }
         return executeData;
-    }
-
-    private static String statementType(String sql) {
-        return sql == null ? "" : sql.strip().split("\\s+", 2)[0].toUpperCase(Locale.ROOT);
     }
 }

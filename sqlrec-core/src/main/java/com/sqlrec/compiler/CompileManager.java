@@ -5,6 +5,7 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.JsonUtils;
 import com.sqlrec.common.utils.ResourceNames;
+import com.sqlrec.common.utils.SqlStatementUtils;
 import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.db.MetadataAccessFactory;
 import com.sqlrec.entity.SqlFunction;
@@ -26,6 +27,7 @@ import org.apache.flink.sql.parser.ddl.SqlSet;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class CompileManager {
     private final List<String> compilingSqlFunctions = new ArrayList<>();
@@ -58,7 +60,7 @@ public class CompileManager {
         BindableInterface bindable = compileRawSql(flinkSqlNode, schema, defaultSchema, originSql);
         bindable.setName(StringUtils.defaultIfEmpty(
                 bindable.getCacheTableName(),
-                SchemaUtils.getSqlFirstWord(originSql)
+                SqlStatementUtils.firstWord(originSql).toLowerCase(Locale.ROOT)
         ));
         return ProxyAllBindable.wrap(bindable);
     }

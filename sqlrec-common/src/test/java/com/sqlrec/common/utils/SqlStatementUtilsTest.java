@@ -19,6 +19,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SqlStatementUtilsTest {
 
     @Test
+    void firstWordSkipsCommentsAndPreservesCase() {
+        assertEquals("SeLeCt", SqlStatementUtils.firstWord(" \t-- note\r\n/* query */SeLeCt(1)"));
+        assertEquals("SELECT", SqlStatementUtils.firstWord("-- note\rSELECT 1"));
+        assertEquals("select", SqlStatementUtils.firstWord("(/* grouped query */select 1)"));
+    }
+
+    @Test
+    void firstWordIsEmptyWhenNoLeadingWordIsPresent() {
+        for (String sql : new String[]{null, "", " \t", "-- select 1", "/* unfinished select", "'select'"}) {
+            assertEquals("", SqlStatementUtils.firstWord(sql), sql);
+        }
+    }
+
+    @Test
     void scanRegionReportsCommentKindAndExclusiveEnd() {
         assertRegion("x -- comment\nnext", 2, RegionKind.LINE_COMMENT, "-- comment", true);
         assertRegion("x -- comment", 2, RegionKind.LINE_COMMENT, "-- comment", true);

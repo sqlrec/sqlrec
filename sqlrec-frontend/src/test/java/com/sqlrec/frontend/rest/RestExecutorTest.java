@@ -4,10 +4,12 @@ import com.sqlrec.common.utils.SilenceLoggers;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.JsonUtils;
 import com.google.gson.JsonParseException;
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.rest.ExecuteData;
 import com.sqlrec.common.runtime.ExecuteContext;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.utils.DataTypeUtils;
+import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.RowTransformUtils;
 import com.sqlrec.compiler.CompileManager;
 import com.sqlrec.compiler.SqlApiCache;
@@ -18,6 +20,7 @@ import com.sqlrec.runtime.ExecuteContextImpl;
 import com.sqlrec.runtime.SqlFunctionBindable;
 import com.sqlrec.schema.CalciteSchemaFactory;
 import com.sqlrec.udf.table.CallSqlRecApiFunction;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
@@ -182,6 +185,30 @@ class RestExecutorTest {
                 () -> RestSqlExecutor.execute("{bad"));
         assertTrue(error.getMessage().startsWith("invalid JSON request body: "));
         assertInstanceOf(JsonParseException.class, error.getCause());
+    }
+
+    @Test
+    void tagsSqlWithTheFirstWordAfterComments() throws Exception {
+        String sql = "/* query */ -- note\nselect 1";
+        var composite = MetricsUtils.getCompositeMeterRegistry();
+        var registry = new SimpleMeterRegistry();
+        composite.add(registry);
+        try (var executors = mockConstruction(SqlExecutor.class, (executor, construction) -> {
+            ExecuteContext context = mock(ExecuteContext.class);
+            when(executor.getExecuteContext()).thenReturn(context);
+            when(context.getVariables()).thenReturn(Map.of());
+            when(executor.executeSql(sql)).thenReturn(new CacheTable("result",
+                    Linq4j.emptyEnumerable(), DataTypeUtils.getStringTypeField("value")));
+        })) {
+            RestSqlExecutor.execute(JsonUtils.toJson(Map.of("sqls", List.of(sql))));
+
+            verify(executors.constructed().getFirst()).executeSql(sql);
+            assertEquals(1, registry.get(Consts.METRICS_SQL_EXECUTION_DURATION)
+                    .tags("statement_type", "SELECT", "outcome", "success").timer().count());
+        } finally {
+            composite.remove(registry);
+            registry.close();
+        }
     }
 
     @Test

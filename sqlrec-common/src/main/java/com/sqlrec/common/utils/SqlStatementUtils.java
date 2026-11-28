@@ -2,9 +2,11 @@ package com.sqlrec.common.utils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
-/** Scans SQL quotes and comments for statement splitting and syntax highlighting. */
+/** Scans SQL text for statement splitting, keyword extraction, and syntax highlighting. */
 public final class SqlStatementUtils {
+    private static final Pattern SQL_WORD = Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
 
     private SqlStatementUtils() {
     }
@@ -38,12 +40,38 @@ public final class SqlStatementUtils {
         }
     }
 
+    /** Returns the first SQL word after whitespace, comments, and opening parentheses, preserving case. */
+    public static String firstWord(String text) {
+        if (text == null) {
+            return "";
+        }
+        int start = 0;
+        while (start < text.length()) {
+            char c = text.charAt(start);
+            if (Character.isWhitespace(c) || c == '(') {
+                start++;
+                continue;
+            }
+            Region region = scanRegion(text, start);
+            if (region == null || (region.getKind() != RegionKind.LINE_COMMENT
+                    && region.getKind() != RegionKind.BLOCK_COMMENT)) {
+                break;
+            }
+            start = region.getEnd();
+        }
+        var word = SQL_WORD.matcher(text).region(start, text.length());
+        return word.lookingAt() ? word.group() : "";
+    }
+
     /** Scans a quote or comment beginning at {@code start}, or returns null at an ordinary character. */
     public static Region scanRegion(String text, int start) {
         char first = text.charAt(start);
         if (first == '-' && text.startsWith("--", start)) {
-            int end = text.indexOf('\n', start + 2);
-            return new Region(RegionKind.LINE_COMMENT, end < 0 ? text.length() : end, true);
+            int end = start + 2;
+            while (end < text.length() && text.charAt(end) != '\n' && text.charAt(end) != '\r') {
+                end++;
+            }
+            return new Region(RegionKind.LINE_COMMENT, end, true);
         }
         if (first == '/' && text.startsWith("/*", start)) {
             int end = text.indexOf("*/", start + 2);
