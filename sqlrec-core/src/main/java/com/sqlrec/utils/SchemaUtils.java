@@ -1,5 +1,6 @@
 package com.sqlrec.utils;
 
+import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.CacheTable;
 import com.sqlrec.common.schema.FieldSchema;
 import com.sqlrec.sql.parser.SqlRecColumnDeclaration;
@@ -155,6 +156,10 @@ public class SchemaUtils {
             return null;
         }
         return table instanceof CacheTable ? (CacheTable) table : null;
+    }
+
+    public static String getRuntimeTableName(String databaseName, String tableName) {
+        return Consts.DEFAULT_SCHEMA_NAME.equals(databaseName) ? tableName : databaseName + "." + tableName;
     }
 
     public static Table getTableObj(CalciteSchema schema, String shortTableName) {

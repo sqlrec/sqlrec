@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.UnaryOperator;
 
@@ -74,7 +75,7 @@ public final class JdbcSqlBuilder {
     public static JdbcStatement select(String url, String tableName, List<FieldSchema> fieldSchemas, List<RexNode> filters) {
         validateFieldSchemas(fieldSchemas);
         JdbcStatement where = JdbcFilterBuilder.build(filters, fieldSchemas, url);
-        StringBuilder sql = selectFrom(url, tableName, fieldSchemas);
+        StringBuilder sql = selectFrom(Dialect.fromUrl(url), tableName, fieldSchemas);
         if (!where.getSql().isEmpty()) {
             sql.append(" WHERE ").append(where.getSql());
         }
@@ -92,17 +93,18 @@ public final class JdbcSqlBuilder {
         if (keyCount <= 0) {
             throw new IllegalArgumentException("keyCount must be positive: " + keyCount);
         }
-        StringBuilder sql = selectFrom(url, tableName, fieldSchemas);
-        sql.append(" WHERE ").append(quoteIdentifier(primaryKey, url)).append(" IN (");
+        Dialect dialect = Dialect.fromUrl(url);
+        StringBuilder sql = selectFrom(dialect, tableName, fieldSchemas);
+        sql.append(" WHERE ").append(quoteIdentifier(primaryKey, dialect)).append(" IN (");
         appendPlaceholders(sql, keyCount);
         sql.append(")");
         return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
-    private static StringBuilder selectFrom(String url, String tableName, List<FieldSchema> fieldSchemas) {
+    private static StringBuilder selectFrom(Dialect dialect, String tableName, List<FieldSchema> fieldSchemas) {
         StringBuilder sql = new StringBuilder("SELECT ");
-        appendColumnNames(sql, fieldSchemas, url);
-        return sql.append(" FROM ").append(quoteQualifiedIdentifier(tableName, url));
+        appendColumnNames(sql, fieldSchemas, dialect);
+        return sql.append(" FROM ").append(quoteQualifiedIdentifier(tableName, dialect));
     }
 
     /**
@@ -113,39 +115,36 @@ public final class JdbcSqlBuilder {
      */
     public static JdbcStatement upsert(String url, String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
         validateFieldSchemas(fieldSchemas);
-        String lowerUrl = url.toLowerCase();
-        if (lowerUrl.startsWith("jdbc:mysql:")) {
+        Dialect dialect = Dialect.fromUrl(Objects.requireNonNull(url));
+        if (dialect == Dialect.MYSQL) {
             return mysqlUpsert(tableName, fieldSchemas);
         }
-        if (lowerUrl.startsWith("jdbc:h2:")) {
+        if (dialect == Dialect.H2) {
             return h2Upsert(tableName, fieldSchemas, primaryKey);
         }
-        // PostgreSQL
         return postgresUpsert(tableName, fieldSchemas, primaryKey);
     }
 
     /** PostgreSQL uses ANSI double-quoted identifiers. */
     private static JdbcStatement postgresUpsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
-        String url = null;
-        StringBuilder sql = insertValues(url, tableName, fieldSchemas);
-        sql.append(" ON CONFLICT (").append(quoteIdentifier(primaryKey, url)).append(") DO UPDATE SET ");
-        appendAssignments(sql, fieldSchemas, url, column -> "EXCLUDED." + column);
+        StringBuilder sql = insertValues(Dialect.POSTGRES, tableName, fieldSchemas);
+        sql.append(" ON CONFLICT (").append(quoteIdentifier(primaryKey, Dialect.POSTGRES)).append(") DO UPDATE SET ");
+        appendAssignments(sql, fieldSchemas, Dialect.POSTGRES, column -> "EXCLUDED." + column);
         return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
     /** MySQL uses backtick-quoted identifiers. */
     private static JdbcStatement mysqlUpsert(String tableName, List<FieldSchema> fieldSchemas) {
-        String url = "jdbc:mysql:";
-        StringBuilder sql = insertValues(url, tableName, fieldSchemas);
+        StringBuilder sql = insertValues(Dialect.MYSQL, tableName, fieldSchemas);
         sql.append(" ON DUPLICATE KEY UPDATE ");
-        appendAssignments(sql, fieldSchemas, url, column -> "VALUES(" + column + ")");
+        appendAssignments(sql, fieldSchemas, Dialect.MYSQL, column -> "VALUES(" + column + ")");
         return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
-    private static StringBuilder insertValues(String url, String tableName, List<FieldSchema> fieldSchemas) {
+    private static StringBuilder insertValues(Dialect dialect, String tableName, List<FieldSchema> fieldSchemas) {
         StringBuilder sql = new StringBuilder("INSERT INTO ");
-        sql.append(quoteQualifiedIdentifier(tableName, url)).append(" (");
-        appendColumnNames(sql, fieldSchemas, url);
+        sql.append(quoteQualifiedIdentifier(tableName, dialect)).append(" (");
+        appendColumnNames(sql, fieldSchemas, dialect);
         sql.append(") VALUES (");
         appendPlaceholders(sql, fieldSchemas.size());
         return sql.append(')');
@@ -153,12 +152,11 @@ public final class JdbcSqlBuilder {
 
     /** H2 uses ANSI double-quoted identifiers. */
     private static JdbcStatement h2Upsert(String tableName, List<FieldSchema> fieldSchemas, String primaryKey) {
-        String url = "jdbc:h2:";
         StringBuilder sql = new StringBuilder("MERGE INTO ");
-        sql.append(quoteQualifiedIdentifier(tableName, url)).append(" (");
-        appendColumnNames(sql, fieldSchemas, url);
+        sql.append(quoteQualifiedIdentifier(tableName, Dialect.H2)).append(" (");
+        appendColumnNames(sql, fieldSchemas, Dialect.H2);
         sql.append(") KEY (");
-        sql.append(quoteIdentifier(primaryKey, url)).append(") VALUES (");
+        sql.append(quoteIdentifier(primaryKey, Dialect.H2)).append(") VALUES (");
         appendPlaceholders(sql, fieldSchemas.size());
         sql.append(")");
         return new JdbcStatement(sql.toString(), Collections.emptyList());
@@ -168,10 +166,11 @@ public final class JdbcSqlBuilder {
     public static JdbcStatement updateByPrimaryKey(String url, String tableName, List<FieldSchema> fieldSchemas,
                                                    String primaryKey) {
         validateFieldSchemas(fieldSchemas);
+        Dialect dialect = Dialect.fromUrl(url);
         StringBuilder sql = new StringBuilder("UPDATE ")
-                .append(quoteQualifiedIdentifier(tableName, url)).append(" SET ");
-        appendAssignments(sql, fieldSchemas, url, column -> "?");
-        sql.append(" WHERE ").append(quoteIdentifier(primaryKey, url)).append(" = ?");
+                .append(quoteQualifiedIdentifier(tableName, dialect)).append(" SET ");
+        appendAssignments(sql, fieldSchemas, dialect, column -> "?");
+        sql.append(" WHERE ").append(quoteIdentifier(primaryKey, dialect)).append(" = ?");
         return new JdbcStatement(sql.toString(), Collections.emptyList());
     }
 
@@ -180,17 +179,18 @@ public final class JdbcSqlBuilder {
      * the caller supplies the key value via {@link JdbcStatement#withParameters(List)}.
      */
     public static JdbcStatement deleteByPrimaryKey(String url, String tableName, String primaryKey) {
-        String sql = "DELETE FROM " + quoteQualifiedIdentifier(tableName, url)
-                + " WHERE " + quoteIdentifier(primaryKey, url) + " = ?";
+        Dialect dialect = Dialect.fromUrl(url);
+        String sql = "DELETE FROM " + quoteQualifiedIdentifier(tableName, dialect)
+                + " WHERE " + quoteIdentifier(primaryKey, dialect) + " = ?";
         return new JdbcStatement(sql, Collections.emptyList());
     }
 
-    private static void appendColumnNames(StringBuilder sql, List<FieldSchema> fieldSchemas, String url) {
+    private static void appendColumnNames(StringBuilder sql, List<FieldSchema> fieldSchemas, Dialect dialect) {
         for (int i = 0; i < fieldSchemas.size(); i++) {
             if (i > 0) {
                 sql.append(", ");
             }
-            sql.append(quoteIdentifier(fieldSchemas.get(i).getName(), url));
+            sql.append(quoteIdentifier(fieldSchemas.get(i).getName(), dialect));
         }
     }
 
@@ -203,13 +203,13 @@ public final class JdbcSqlBuilder {
         }
     }
 
-    private static void appendAssignments(StringBuilder sql, List<FieldSchema> fieldSchemas, String url,
+    private static void appendAssignments(StringBuilder sql, List<FieldSchema> fieldSchemas, Dialect dialect,
                                           UnaryOperator<String> valueExpression) {
         for (int i = 0; i < fieldSchemas.size(); i++) {
             if (i > 0) {
                 sql.append(", ");
             }
-            String column = quoteIdentifier(fieldSchemas.get(i).getName(), url);
+            String column = quoteIdentifier(fieldSchemas.get(i).getName(), dialect);
             sql.append(column).append(" = ").append(valueExpression.apply(column));
         }
     }
@@ -225,28 +225,22 @@ public final class JdbcSqlBuilder {
      * corresponding quote character is escaped by doubling.
      */
     public static String quoteIdentifier(String identifier, String url) {
+        return quoteIdentifier(identifier, Dialect.fromUrl(url));
+    }
+
+    private static String quoteIdentifier(String identifier, Dialect dialect) {
         if (identifier == null || identifier.isEmpty()) {
             return identifier;
         }
-        if (isSafeIdentifier(identifier) && !reservedWords(url).contains(identifier.toUpperCase(Locale.ROOT))) {
+        if (isSafeIdentifier(identifier) && !dialect.reservedWords.contains(identifier.toUpperCase(Locale.ROOT))) {
             return identifier;
         }
-        boolean mySql = url != null && url.toLowerCase().startsWith("jdbc:mysql:");
-        if (mySql) {
-            return "`" + identifier.replace("`", "``") + "`";
-        }
-        return "\"" + identifier.replace("\"", "\"\"") + "\"";
+        String quote = dialect.identifierQuote;
+        return quote + identifier.replace(quote, quote + quote) + quote;
     }
 
     private static Set<String> keywords(String words) {
         return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(words.split(" "))));
-    }
-
-    private static Set<String> reservedWords(String url) {
-        String dialect = url == null ? "" : url.toLowerCase(Locale.ROOT);
-        if (dialect.startsWith("jdbc:h2:")) return H2_RESERVED;
-        if (dialect.startsWith("jdbc:mysql:")) return MYSQL_RESERVED;
-        return POSTGRES_RESERVED;
     }
 
     /**
@@ -255,6 +249,10 @@ public final class JdbcSqlBuilder {
      * named {@code schema.table}, which is not the same object in SQL.
      */
     public static String quoteQualifiedIdentifier(String identifier, String url) {
+        return quoteQualifiedIdentifier(identifier, Dialect.fromUrl(url));
+    }
+
+    private static String quoteQualifiedIdentifier(String identifier, Dialect dialect) {
         if (identifier == null || identifier.isEmpty()) {
             return identifier;
         }
@@ -269,7 +267,7 @@ public final class JdbcSqlBuilder {
             if (i > 0) {
                 result.append('.');
             }
-            result.append(quoteIdentifier(parts[i], url));
+            result.append(quoteIdentifier(parts[i], dialect));
         }
         return result.toString();
     }
@@ -296,5 +294,30 @@ public final class JdbcSqlBuilder {
             }
         }
         return true;
+    }
+
+    private enum Dialect {
+        POSTGRES("\"", POSTGRES_RESERVED),
+        MYSQL("`", MYSQL_RESERVED),
+        H2("\"", H2_RESERVED);
+
+        private final String identifierQuote;
+        private final Set<String> reservedWords;
+
+        Dialect(String identifierQuote, Set<String> reservedWords) {
+            this.identifierQuote = identifierQuote;
+            this.reservedWords = reservedWords;
+        }
+
+        private static Dialect fromUrl(String url) {
+            String lowerUrl = url == null ? "" : url.toLowerCase(Locale.ROOT);
+            if (lowerUrl.startsWith("jdbc:mysql:")) {
+                return MYSQL;
+            }
+            if (lowerUrl.startsWith("jdbc:h2:")) {
+                return H2;
+            }
+            return POSTGRES;
+        }
     }
 }

@@ -1,8 +1,7 @@
 package com.sqlrec.db.local;
 
-import com.sqlrec.common.utils.JsonUtils;
-import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.common.config.Consts;
+import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.db.StoreAccess;
 import com.sqlrec.entity.*;
 import com.sqlrec.sql.parser.SqlCreateApi;
@@ -53,12 +52,7 @@ public class InMemoryStoreAccess implements StoreAccess {
             for (SqlNode node : nodeGroup) {
                 sqlList.add(SqlUnparseUtils.format(node));
             }
-            SqlFunction sqlFunction = new SqlFunction();
-            sqlFunction.setName(functionName);
-            sqlFunction.setSqlList(JsonUtils.toJson(sqlList));
-            sqlFunction.setCreatedAt(System.currentTimeMillis());
-            sqlFunction.setUpdatedAt(System.currentTimeMillis());
-            sqlFunctionMap.put(functionName, sqlFunction);
+            sqlFunctionMap.put(functionName, SqlFunction.create(functionName, sqlList));
         }
     }
 
@@ -67,11 +61,7 @@ public class InMemoryStoreAccess implements StoreAccess {
             if (!(node instanceof SqlCreateApi createApi)) {
                 throw new RuntimeException("Expected SqlCreateApi but got " + node.getClass().getSimpleName());
             }
-            SqlApi sqlApi = new SqlApi();
-            sqlApi.setName(ResourceNames.normalize(createApi.getApiName()));
-            sqlApi.setFunctionName(ResourceNames.normalize(createApi.getFuncName()));
-            sqlApi.setCreatedAt(System.currentTimeMillis());
-            sqlApi.setUpdatedAt(System.currentTimeMillis());
+            SqlApi sqlApi = SqlApi.create(createApi.getApiName(), createApi.getFuncName());
             sqlApiMap.put(sqlApi.getName(), sqlApi);
         }
     }
@@ -81,11 +71,7 @@ public class InMemoryStoreAccess implements StoreAccess {
             if (!(node instanceof SqlCreateModel createModel)) {
                 throw new RuntimeException("Expected SqlCreateModel but got " + node.getClass().getSimpleName());
             }
-            Model model = new Model();
-            model.setName(ResourceNames.of(createModel.getModelName()));
-            model.setDdl(SqlUnparseUtils.format(node));
-            model.setCreatedAt(System.currentTimeMillis());
-            model.setUpdatedAt(System.currentTimeMillis());
+            Model model = Model.create(ResourceNames.of(createModel.getModelName()), SqlUnparseUtils.format(node));
             modelMap.put(model.getName(), model);
         }
     }

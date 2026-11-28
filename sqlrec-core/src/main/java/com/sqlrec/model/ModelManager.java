@@ -93,12 +93,7 @@ public class ModelManager {
 
     public static void saveModel(ModelConf modelConfig) {
         MetadataAccess db = MetadataAccessFactory.getInstance();
-        Model model = new Model();
-        model.setName(modelConfig.getModelName());
-        model.setDdl(modelConfig.getDdl());
-        model.setCreatedAt(System.currentTimeMillis());
-        model.setUpdatedAt(System.currentTimeMillis());
-        db.insertModel(model);
+        db.insertModel(Model.create(modelConfig.getModelName(), modelConfig.getDdl()));
     }
 
     public static List<CheckpointInfo> trainModel(SqlTrainModel sqlTrainModel, String defaultSchema) throws Exception {

@@ -1,8 +1,6 @@
 package com.sqlrec.executor;
 
 import com.sqlrec.common.model.CheckpointInfo;
-import com.sqlrec.common.utils.JsonUtils;
-import com.sqlrec.common.utils.ResourceNames;
 import com.sqlrec.compiler.FunctionCompiler;
 import com.sqlrec.compiler.SqlApiCache;
 import com.sqlrec.compiler.SqlFunctionCache;
@@ -125,11 +123,7 @@ final class ResourceCommandExecutor {
     }
 
     static void saveSqlFunction(MetadataAccess metadata, FunctionCompiler compiler) {
-        SqlFunction function = new SqlFunction();
-        function.setName(compiler.getFunctionBindable().getFunName());
-        function.setSqlList(JsonUtils.toJson(compiler.getSqlList()));
-        function.setCreatedAt(System.currentTimeMillis());
-        function.setUpdatedAt(System.currentTimeMillis());
+        SqlFunction function = SqlFunction.create(compiler.getFunctionBindable().getFunName(), compiler.getSqlList());
         if (compiler.isOrReplace()) {
             metadata.upsertSqlFunction(function);
         } else {
@@ -139,11 +133,7 @@ final class ResourceCommandExecutor {
     }
 
     private void saveSqlApi(SqlCreateApi command) {
-        SqlApi api = new SqlApi();
-        api.setName(ResourceNames.normalize(command.getApiName()));
-        api.setFunctionName(ResourceNames.normalize(command.getFuncName()));
-        api.setCreatedAt(System.currentTimeMillis());
-        api.setUpdatedAt(System.currentTimeMillis());
+        SqlApi api = SqlApi.create(command.getApiName(), command.getFuncName());
         if (command.isOrReplace()) {
             metadata.upsertSqlApi(api);
         } else {

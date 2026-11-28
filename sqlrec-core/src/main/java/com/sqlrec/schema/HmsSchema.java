@@ -2,7 +2,6 @@ package com.sqlrec.schema;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
-import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.config.SqlRecConfigs;
 import com.sqlrec.common.utils.MetricsUtils;
 import com.sqlrec.common.utils.ResourceNames;
@@ -10,6 +9,7 @@ import com.sqlrec.db.MetadataAccess;
 import com.sqlrec.udf.UdfManager;
 import com.sqlrec.udf.config.FunctionConfigs;
 import com.sqlrec.utils.CacheUtils;
+import com.sqlrec.utils.SchemaUtils;
 import com.sqlrec.utils.TableFactoryUtils;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.Table;
@@ -123,8 +123,7 @@ public class HmsSchema extends AbstractSchema {
     }
 
     private void unregisterTableMetrics(String table) {
-        String fullName = Consts.DEFAULT_SCHEMA_NAME.equals(databaseName) ? table : databaseName + "." + table;
-        MetricsUtils.unregisterTableCacheMetrics(fullName);
+        MetricsUtils.unregisterTableCacheMetrics(SchemaUtils.getRuntimeTableName(databaseName, table));
     }
 
     private Multimap<String, Function> computeFunctionMap() {

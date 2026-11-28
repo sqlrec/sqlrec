@@ -1,10 +1,23 @@
 package com.sqlrec.entity;
 
+import com.sqlrec.common.utils.JsonUtils;
+
+import java.util.List;
+
 public class SqlFunction {
     private String name;
     private String sqlList;
     private long createdAt;
     private long updatedAt;
+
+    public static SqlFunction create(String name, List<String> sqlList) {
+        SqlFunction function = new SqlFunction();
+        function.name = name;
+        function.sqlList = JsonUtils.toJson(sqlList);
+        function.createdAt = System.currentTimeMillis();
+        function.updatedAt = function.createdAt;
+        return function;
+    }
 
     public String getName() {
         return name;

@@ -1,6 +1,5 @@
 package com.sqlrec.utils;
 
-import com.sqlrec.common.config.Consts;
 import com.sqlrec.common.schema.HmsTableFactory;
 import com.sqlrec.common.schema.SqlRecTable;
 import com.sqlrec.common.utils.HiveTableUtils;
@@ -26,13 +25,9 @@ public class TableFactoryUtils {
             HmsTableFactory tableFactory = getTableFactory(connector);
             if (tableFactory != null) {
                 Table table = tableFactory.getTableFromHmsTable(tableObj);
-                if (table instanceof SqlRecTable) {
-                    String dbName = tableObj.getDbName();
-                    String tableName = tableObj.getTableName();
-                    String fullName = Consts.DEFAULT_SCHEMA_NAME.equals(dbName)
-                            ? tableName
-                            : dbName + "." + tableName;
-                    ((SqlRecTable) table).setTableName(fullName);
+                if (table instanceof SqlRecTable sqlRecTable) {
+                    sqlRecTable.setTableName(
+                            SchemaUtils.getRuntimeTableName(tableObj.getDbName(), tableObj.getTableName()));
                 }
                 return table;
             } else {
